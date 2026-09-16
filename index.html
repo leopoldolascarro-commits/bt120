@@ -1,0 +1,1486 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KW Santa Ana - Desafío Breakthrough 120</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- ✅ FIX PRINCIPAL: Import map para resolver "react/jsx-runtime" -->
+  <script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@18.2.0",
+      "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime",
+      "react-dom": "https://esm.sh/react-dom@18.2.0",
+      "react-dom/client": "https://esm.sh/react-dom@18.2.0/client"
+    }
+  }
+  </script>
+
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    .scrollbar-none::-webkit-scrollbar { display: none; }
+    .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased">
+  <div id="root"></div>
+
+  <script type="text/babel" data-type="module">
+    import React, { useState, useEffect, useMemo, useRef } from 'react';
+    import ReactDOM from 'react-dom/client';
+
+    import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js';
+    import {
+      getAuth,
+      onAuthStateChanged,
+      signInAnonymously,
+      signInWithCustomToken
+    } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
+    import {
+      getFirestore,
+      doc,
+      setDoc,
+      onSnapshot,
+      collection,
+      deleteDoc,
+      writeBatch
+    } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
+
+    import * as Lucide from 'https://esm.sh/lucide-react@0.344.0';
+
+    const {
+      PlusCircle, BarChart3, Calendar, LogOut, Database, MessageCircle, Clock, Home, Share2,
+      CalendarCheck, UserPlus, CheckCircle2, Download, Search, CalendarDays, Trophy, Medal,
+      Crown, Star, Award, User, Lock, RefreshCw, AlertTriangle, ChevronRight, Filter, Check,
+      ChevronDown, X, FileSpreadsheet, UploadCloud, HelpCircle, Zap, PhoneCall
+    } = Lucide;
+
+    // ── CONFIGURACIÓN FIREBASE ──────────────────────────────────────────────
+    const firebaseConfig = {
+      apiKey: "",
+      authDomain: "bt120-kw-santa-ana.firebaseapp.com",
+      projectId: "bt120-kw-santa-ana",
+      storageBucket: "bt120-kw-santa-ana.firebasestorage.app",
+      messagingSenderId: "362058547139",
+      appId: "1:362058547139:web:6401df259ddfac0d948776"
+    };
+
+    const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const appId = 'bt120-kw-santa-ana';
+
+    // ── NÓMINA BASE ────────────────────────────────────────────────────────
+    const PRELOADED_AGENTS = [
+      { id: 'leopoldo_lascarro', nombre: 'Leopoldo Lascarro O.', email: 'teckwsantaana@kwcolombia.com', pin: '9700', telefono: '+573107596589', isAdmin: true },
+      { id: 'andres_gomez', nombre: 'Andrés Felipe Gómez', email: 'andres.gomez@kwcolombia.com', pin: '1234', telefono: '+573001234567', isAdmin: false },
+      { id: 'camila_restrepo', nombre: 'Camila Restrepo Patiño', email: 'camila.restrepo@kwcolombia.com', pin: '5678', telefono: '+573007654321', isAdmin: false }
+    ];
+
+    const INDICATORS = [
+      { id: 'nuevosBD', label: 'Nuevos a Base de Datos', color: 'bg-rose-50 border-rose-200 text-rose-700', icon: Database, weight: 2 },
+      { id: 'conversaciones', label: 'Conversación Inmobiliaria', color: 'bg-emerald-50 border-emerald-200 text-emerald-700', icon: MessageCircle, weight: 2 },
+      { id: 'seguimiento', label: 'Seguimiento', color: 'bg-sky-50 border-sky-200 text-sky-700', icon: Clock, weight: 2 },
+      { id: 'openHouse', label: 'Prospecto de Open House', color: 'bg-amber-50 border-amber-200 text-amber-700', icon: Home, weight: 2 },
+      { id: 'redesSociales', label: 'Prospecto de Redes Sociales', color: 'bg-indigo-50 border-indigo-200 text-indigo-700', icon: Share2, weight: 2 },
+      { id: 'citas', label: 'Citas Programadas', color: 'bg-purple-50 border-purple-200 text-purple-700', icon: CalendarCheck, weight: 25 },
+      { id: 'referencias', label: 'Referencias Recibidas', color: 'bg-teal-50 border-teal-200 text-teal-700', icon: UserPlus, weight: 50 },
+      { id: 'captaciones', label: 'Captaciones', color: 'bg-orange-50 border-orange-200 text-orange-700', icon: Star, weight: 75 },
+      { id: 'cierres', label: 'Cierres', color: 'bg-green-50 border-green-200 text-green-700', icon: Trophy, weight: 100 },
+    ];
+
+    const RANKING_METRICS_DEF = {
+      puntos: { label: 'Puntaje Total', unit: 'Pts' },
+      nuevosBD: { label: 'Nuevos BD', unit: 'Contactos' },
+      conversaciones: { label: 'Conversación Inmobiliaria', unit: 'Conversaciones' },
+      seguimiento: { label: 'Seguimiento', unit: 'Seguimientos' },
+      openHouse: { label: 'Prospecto Open House', unit: 'Prospectos' },
+      redesSociales: { label: 'Prospecto Redes', unit: 'Prospectos' },
+      citas: { label: 'Citas Programadas', unit: 'Citas' },
+      referencias: { label: 'Referencias Recibidas', unit: 'Referencias' },
+      captaciones: { label: 'Captaciones', unit: 'Captaciones' },
+      cierres: { label: 'Cierres', unit: 'Cierres' }
+    };
+
+    // ── HELPERS ────────────────────────────────────────────────────────────
+    const calcScore = (log) =>
+      (log.nuevosBD || 0) * 2 +
+      (log.conversaciones || 0) * 2 +
+      (log.seguimiento || 0) * 2 +
+      (log.openHouse || 0) * 2 +
+      (log.redesSociales || 0) * 2 +
+      (log.citas || 0) * 25 +
+      (log.referencias || 0) * 50 +
+      (log.captaciones || 0) * 75 +
+      (log.cierres || 0) * 100;
+
+    const emptyForm = () => ({
+      nuevosBD: 0, conversaciones: 0, seguimiento: 0,
+      openHouse: 0, redesSociales: 0, citas: 0, referencias: 0,
+      captaciones: 0, cierres: 0
+    });
+
+    // ── COMPONENTE PRINCIPAL ───────────────────────────────────────────────
+    function App() {
+      const [firebaseUser, setFirebaseUser]   = useState(null);
+      const [fbReady, setFbReady]             = useState(false);
+      const [currentAgent, setCurrentAgent]   = useState(null);
+      const [loading, setLoading]             = useState(true);
+      const [authError, setAuthError]         = useState('');
+
+      const [agentSearchInput, setAgentSearchInput]   = useState('');
+      const [isDropdownOpen, setIsDropdownOpen]       = useState(false);
+      const [selectedAgentTemp, setSelectedAgentTemp] = useState(null);
+      const [pinInput, setPinInput]                   = useState('');
+      const [showPin, setShowPin]                     = useState(false);
+      const dropdownRef = useRef(null);
+
+      const [activeTab, setActiveTab]               = useState('daily');
+      const [activeRankingMetric, setActiveRankingMetric] = useState('puntos');
+
+      const [allLogs, setAllLogs]             = useState([]);
+      const [powerHourLogs, setPowerHourLogs] = useState([]);
+      const [firestoreAgents, setFirestoreAgents] = useState([]);
+
+      const [csvPreviewData, setCsvPreviewData] = useState([]);
+      const [isUploadingCsv, setIsUploadingCsv] = useState(false);
+      const [csvError, setCsvError]             = useState('');
+      const fileInputRef = useRef(null);
+
+      const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+      const [dailyForm, setDailyForm]       = useState(emptyForm());
+
+      const [savingLog, setSavingLog]       = useState(false);
+      const [actionNotice, setActionNotice] = useState({ show: false, message: '', type: 'success' });
+      const [generatingMock, setGeneratingMock] = useState(false);
+      const [confirmModal, setConfirmModal] = useState({ show: false, title: '', message: '', onConfirm: null });
+
+      const [adminSearchTerm, setAdminSearchTerm]     = useState('');
+      const [adminSelectedUser, setAdminSelectedUser] = useState('all');
+
+      useEffect(() => {
+        const handler = (e) => {
+          if (dropdownRef.current && !dropdownRef.current.contains(e.target))
+            setIsDropdownOpen(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+      }, []);
+
+      // ── FIREBASE AUTH ─────────────────────────────────────────────────────
+      useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+          if (user) {
+            setFirebaseUser(user);
+            setFbReady(true);
+            setLoading(false);
+          } else {
+            try {
+              if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await signInWithCustomToken(auth, __initial_auth_token);
+              } else {
+                await signInAnonymously(auth);
+              }
+            } catch (err) {
+              console.error('Firebase Auth error:', err.code, err.message);
+              triggerActionNotice('Error de conexión con Firebase: ' + err.message, 'error');
+              setLoading(false);
+            }
+          }
+        });
+        return () => unsubscribe();
+      }, []);
+
+      // ── FIRESTORE SUBSCRIPTIONS ───────────────────────────────────────────
+      useEffect(() => {
+        if (!fbReady || !firebaseUser) return;
+
+        const logsRef  = collection(db, 'artifacts', appId, 'public', 'data', 'dailyLogs');
+        const usersRef = collection(db, 'artifacts', appId, 'public', 'data', 'users');
+        const phLogsRef = collection(db, 'artifacts', appId, 'public', 'data', 'powerHourLogs');
+
+        const unsubLogs = onSnapshot(logsRef,
+          (snap) => {
+            const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            setAllLogs(list);
+          },
+          (err) => console.error('onSnapshot logs:', err.code, err.message)
+        );
+
+        const unsubUsers = onSnapshot(usersRef,
+          (snap) => {
+            const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            setFirestoreAgents(list);
+
+            const saved = localStorage.getItem('bt120_agent_session');
+            if (saved && !currentAgent) {
+              try {
+                const parsed = JSON.parse(saved);
+                const merged = mergeAgents([...PRELOADED_AGENTS], list);
+                const match  = merged.find(
+                  a => a.email.toLowerCase() === parsed.email.toLowerCase() && a.pin === parsed.pin
+                );
+                if (match) {
+                  setCurrentAgent(match);
+                  setActiveTab(match.isAdmin ? 'admin' : 'daily');
+                }
+              } catch (_) { localStorage.removeItem('bt120_agent_session'); }
+            }
+          },
+          (err) => console.error('onSnapshot users:', err.code, err.message)
+        );
+
+        const unsubPhLogs = onSnapshot(phLogsRef,
+          (snap) => {
+            const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            setPowerHourLogs(list);
+          },
+          (err) => console.error('onSnapshot phLogs:', err.code, err.message)
+        );
+
+        return () => { unsubLogs(); unsubUsers(); unsubPhLogs(); };
+      }, [fbReady, firebaseUser]);
+
+      const mergeAgents = (base, fromFirestore) => {
+        const result = [...base];
+        fromFirestore.forEach(fa => {
+          const idx = result.findIndex(a => a.email.toLowerCase() === fa.email.toLowerCase());
+          if (idx !== -1) result[idx] = { ...result[idx], ...fa };
+          else result.push(fa);
+        });
+        return result;
+      };
+
+      const activeAgentsList = useMemo(
+        () => mergeAgents([...PRELOADED_AGENTS], firestoreAgents),
+        [firestoreAgents]
+      );
+
+      useEffect(() => {
+        if (!currentAgent) return;
+        const existing = allLogs.find(l => l.id === `${currentAgent.id}_${selectedDate}`);
+        setDailyForm(existing ? {
+          nuevosBD: existing.nuevosBD || 0,
+          conversaciones: existing.conversaciones || 0,
+          seguimiento: existing.seguimiento || 0,
+          openHouse: existing.openHouse || 0,
+          redesSociales: existing.redesSociales || 0,
+          citas: existing.citas || 0,
+          referencias: existing.referencias || 0,
+          captaciones: existing.captaciones || 0,
+          cierres: existing.cierres || 0,
+        } : emptyForm());
+      }, [selectedDate, allLogs, currentAgent]);
+
+      const filteredSearchAgents = useMemo(() => {
+        if (!agentSearchInput.trim()) return activeAgentsList;
+        const t = agentSearchInput.toLowerCase();
+        return activeAgentsList.filter(a =>
+          a.nombre.toLowerCase().includes(t) || a.email.toLowerCase().includes(t)
+        );
+      }, [agentSearchInput, activeAgentsList]);
+
+      // ── LOGIN ─────────────────────────────────────────────────────────────
+      const handleAgentLogin = (e) => {
+        e.preventDefault();
+        setAuthError('');
+        if (!selectedAgentTemp) { setAuthError('Selecciona un asesor de la lista.'); return; }
+        if (selectedAgentTemp.pin !== pinInput.trim()) { setAuthError('PIN incorrecto.'); return; }
+        setCurrentAgent(selectedAgentTemp);
+        localStorage.setItem('bt120_agent_session', JSON.stringify({
+          email: selectedAgentTemp.email, pin: selectedAgentTemp.pin
+        }));
+        setActiveTab(selectedAgentTemp.isAdmin ? 'admin' : 'daily');
+        triggerActionNotice(`¡Bienvenido, ${selectedAgentTemp.nombre}!`, 'success');
+        setPinInput(''); setSelectedAgentTemp(null); setAgentSearchInput('');
+      };
+
+      const handleLogout = () => {
+        localStorage.removeItem('bt120_agent_session');
+        setCurrentAgent(null); setActiveTab('daily');
+        triggerActionNotice('Sesión cerrada', 'info');
+      };
+
+      // ── GUARDAR ACTIVIDAD DIARIA ──────────────────────────────────────────
+      const handleSaveDailyLog = async (e) => {
+        e.preventDefault();
+        if (!currentAgent || !firebaseUser) {
+          triggerActionNotice('Espera: conectando con Firebase...', 'error'); return;
+        }
+        setSavingLog(true);
+        try {
+          const logId = `${currentAgent.id}_${selectedDate}`;
+          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'dailyLogs', logId), {
+            id: logId,
+            userId: currentAgent.id,
+            userName: currentAgent.nombre,
+            userEmail: currentAgent.email,
+            fecha: selectedDate,
+            fechaActualizacion: new Date().toISOString(),
+            ...dailyForm
+          });
+          triggerActionNotice(`¡Actividad del ${selectedDate} guardada!`, 'success');
+        } catch (err) {
+          console.error('Error guardando actividad:', err.code, err.message);
+          triggerActionNotice(`Error al guardar: ${err.code || err.message}`, 'error');
+        } finally { setSavingLog(false); }
+      };
+
+      // ── HORA DEL PODER LOGIC ──────────────────────────────────────────────
+      const handlePowerHourAction = async (field) => {
+        if (!currentAgent || !firebaseUser) {
+          triggerActionNotice('Espera: conectando con Firebase...', 'error'); return;
+        }
+        try {
+          const todayDate = new Date().toISOString().split('T')[0];
+          const logId = `${currentAgent.id}_${todayDate}`;
+          
+          const currentLog = powerHourLogs.find(l => l.id === logId) || {
+            id: logId, userId: currentAgent.id, userName: currentAgent.nombre, userEmail: currentAgent.email, fecha: todayDate,
+            llamadas: 0, conversaciones: 0, nuevosBD: 0
+          };
+
+          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'powerHourLogs', logId), {
+            ...currentLog,
+            [field]: (currentLog[field] || 0) + 1,
+            fechaActualizacion: new Date().toISOString()
+          }, { merge: true });
+          
+          triggerActionNotice(`+1 Registrado con éxito`, 'success');
+        } catch (err) {
+          console.error('Error guardando hora del poder:', err.code, err.message);
+          triggerActionNotice(`Error al guardar: ${err.code || err.message}`, 'error');
+        }
+      };
+
+      // ── IMPORTAR CSV ──────────────────────────────────────────────────────
+      const handleCsvFileChange = (e) => {
+        const file = e.target.files[0];
+        setCsvError(''); setCsvPreviewData([]);
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const text    = ev.target.result;
+            const delim   = text.split('\n')[0].includes(';') ? ';' : ',';
+            const lines   = text.split(/\r?\n/);
+            if (lines.length < 2) { setCsvError('Archivo CSV vacío.'); return; }
+
+            const headers = lines[0].split(delim).map(h => h.trim().replace(/["']/g, '').toUpperCase());
+            const required = ['NOMBRE_AGENTE', 'TELEFONO', 'PIN', 'EMAIL_KW', 'ROL'];
+            const missing  = required.filter(f => !headers.includes(f));
+            if (missing.length) { setCsvError(`Faltan columnas: ${missing.join(', ')}`); return; }
+
+            const agents = [];
+            for (let i = 1; i < lines.length; i++) {
+              const line = lines[i].trim();
+              if (!line) continue;
+              const vals = []; let cur = ''; let inQ = false;
+              for (const ch of line) {
+                if (ch === '"' || ch === "'") { inQ = !inQ; }
+                else if (ch === delim && !inQ) { vals.push(cur.trim()); cur = ''; }
+                else cur += ch;
+              }
+              vals.push(cur.trim());
+              if (vals.length < headers.length) continue;
+              const row = {};
+              headers.forEach((h, idx) => { row[h] = vals[idx]?.replace(/["']/g, '') || ''; });
+              const email = row['EMAIL_KW']?.toLowerCase().trim();
+              if (!email) continue;
+              agents.push({
+                id: email.replace(/[@.]/g, '_'),
+                nombre: row['NOMBRE_AGENTE'],
+                telefono: row['TELEFONO'],
+                pin: row['PIN'],
+                email,
+                isAdmin: ['ADMIN', 'ADMINISTRADOR'].includes(row['ROL']?.toUpperCase())
+              });
+            }
+            if (!agents.length) setCsvError('No se encontraron agentes válidos.');
+            else setCsvPreviewData(agents);
+          } catch (err) { setCsvError('Error al leer el CSV: ' + err.message); }
+        };
+        reader.readAsText(file);
+      };
+
+      const saveImportedAgents = async () => {
+        if (!csvPreviewData.length) return;
+        if (!firebaseUser) {
+          triggerActionNotice('Firebase no está listo. Espera unos segundos y reintenta.', 'error');
+          return;
+        }
+        setIsUploadingCsv(true);
+        try {
+          const batch = writeBatch(db);
+          csvPreviewData.forEach(agent => {
+            const ref = doc(db, 'artifacts', appId, 'public', 'data', 'users', agent.id);
+            batch.set(ref, {
+              id: agent.id,
+              nombre: agent.nombre,
+              telefono: agent.telefono || '',
+              pin: agent.pin,
+              email: agent.email,
+              isAdmin: agent.isAdmin,
+              fechaImportacion: new Date().toISOString()
+            });
+          });
+          await batch.commit();
+          triggerActionNotice(`¡${csvPreviewData.length} asesores importados correctamente!`, 'success');
+          setCsvPreviewData([]);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        } catch (err) {
+          console.error('Error importando agentes:', err.code, err.message);
+          let msg = 'Error al guardar en Firebase.';
+          if (err.code === 'permission-denied') {
+            msg = '❌ Sin permisos. Ve a Firebase → Firestore → Reglas y aplica las reglas correctas.';
+          } else if (err.code === 'unavailable') {
+            msg = '❌ Firebase no disponible. Verifica tu conexión a internet.';
+          } else if (err.code === 'not-found') {
+            msg = '❌ Base de datos no existe. Crea Firestore en la consola de Firebase primero.';
+          } else {
+            msg = `❌ ${err.code}: ${err.message}`;
+          }
+          triggerActionNotice(msg, 'error');
+        } finally { setIsUploadingCsv(false); }
+      };
+
+      // ── EXPORTAR CSV ──────────────────────────────────────────────────────
+      const downloadCSV = (content, filename) => {
+        const blob = new Blob(['\uFEFF' + content], { type: 'text/csv;charset=utf-8;' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      };
+
+      const downloadTemplateCSV = () => {
+        downloadCSV(
+          'NOMBRE_AGENTE,Telefono,pin,Email_KW,ROL\nLeopoldo Lascarro O.,+573107596589,9700,teckwsantaana@kwcolombia.com,ADMIN\nAndrés Felipe Gómez,3001234567,1234,andres.gomez@kwcolombia.com,AGENT',
+          'Plantilla_Agentes_BT120.csv'
+        );
+      };
+
+      const handleExportAgentsCSV = () => {
+        const rows = activeAgentsList.map(a =>
+          [`"${a.nombre}"`, `"${a.telefono||''}"`, `"${a.pin}"`, `"${a.email}"`, a.isAdmin ? 'ADMIN' : 'AGENT'].join(',')
+        );
+        downloadCSV('NOMBRE_AGENTE,Telefono,pin,Email_KW,ROL\n' + rows.join('\n'), 'Nomina_Actual_BT120.csv');
+        triggerActionNotice('Nómina exportada', 'success');
+      };
+
+      const handleExportPerformanceCSV = () => {
+        const header = 'Nombre,Email,Telefono,Puntos,Actividades,NuevosBD,Conversaciones,Seguimiento,OpenHouse,Redes,Citas,Referencias,Captaciones,Cierres';
+        const rows = agentsPerformanceBase.map(a => {
+          const ag = activeAgentsList.find(u => u.id === a.id);
+          return [
+            `"${a.nombre}"`, `"${a.email}"`, `"${ag?.telefono||''}"`,
+            a.puntos, a.totalActividades,
+            a.nuevosBD, a.conversaciones, a.seguimiento, a.openHouse, a.redesSociales, a.citas, a.referencias,
+            a.captaciones, a.cierres
+          ].join(',');
+        });
+        downloadCSV(header + '\n' + rows.join('\n'), `Consolidado_BT120_${new Date().toISOString().split('T')[0]}.csv`);
+        triggerActionNotice('Consolidado exportado', 'success');
+      };
+
+      const handleExportDataCSV = () => {
+        const header = 'Fecha,Agente,Email,Telefono,NuevosBD,Conversaciones,Seguimiento,OpenHouse,Redes,Citas,Referencias,Captaciones,Cierres,Puntos,Actividades,Simulado';
+        const rows = allLogs.map(log => {
+          const ag = activeAgentsList.find(u => u.id === log.userId);
+          const sum = (log.nuevosBD||0)+(log.conversaciones||0)+(log.seguimiento||0)+(log.openHouse||0)+(log.redesSociales||0)+(log.citas||0)+(log.referencias||0)+(log.captaciones||0)+(log.cierres||0);
+          return [
+            log.fecha, `"${log.userName||''}"`, log.userEmail||'',
+            `"${ag?.telefono||''}"`,
+            log.nuevosBD||0, log.conversaciones||0, log.seguimiento||0,
+            log.openHouse||0, log.redesSociales||0, log.citas||0, log.referencias||0,
+            log.captaciones||0, log.cierres||0,
+            calcScore(log), sum, log.esMock ? 'SI' : 'NO'
+          ].join(',');
+        });
+        downloadCSV(header + '\n' + rows.join('\n'), `Reporte_Historico_BT120_${new Date().toISOString().split('T')[0]}.csv`);
+        triggerActionNotice('Reporte histórico exportado', 'success');
+      };
+
+      // ── MOCK DATA ─────────────────────────────────────────────────────────
+      const handleInsertMockData = async () => {
+        if (!firebaseUser) { triggerActionNotice('Firebase no listo', 'error'); return; }
+        setGeneratingMock(true);
+        try {
+          const today = new Date();
+          const promises = [];
+          activeAgentsList.filter(a => !a.isAdmin).forEach(agent => {
+            for (let i = 0; i < 10; i++) {
+              const d = new Date(); d.setDate(today.getDate() - i);
+              const dateStr = d.toISOString().split('T')[0];
+              const logId = `${agent.id}_${dateStr}`;
+              promises.push(setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'dailyLogs', logId), {
+                id: logId, userId: agent.id, userName: agent.nombre, userEmail: agent.email,
+                fecha: dateStr, fechaActualizacion: new Date().toISOString(),
+                nuevosBD: Math.floor(Math.random() * 4),
+                conversaciones: Math.floor(Math.random() * 10) + 2,
+                seguimiento: Math.floor(Math.random() * 6),
+                openHouse: Math.random() > 0.8 ? 1 : 0,
+                redesSociales: Math.floor(Math.random() * 4),
+                citas: Math.random() > 0.7 ? 1 : 0,
+                referencias: Math.random() > 0.8 ? 1 : 0,
+                esMock: true
+              }));
+            }
+          });
+          await Promise.all(promises);
+          triggerActionNotice('Simulación cargada (10 días)', 'success');
+        } catch (err) {
+          console.error(err);
+          triggerActionNotice(`Error simulación: ${err.code}`, 'error');
+        } finally { setGeneratingMock(false); }
+      };
+
+      const confirmClearMockData = () => {
+        setConfirmModal({
+          show: true,
+          title: 'Eliminar datos de prueba',
+          message: '¿Eliminar todos los registros generados por el simulador? Los datos reales se conservan.',
+          onConfirm: async () => {
+            setGeneratingMock(true);
+            setConfirmModal(p => ({ ...p, show: false }));
+            try {
+              await Promise.all(
+                allLogs.filter(l => l.esMock).map(l =>
+                  deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'dailyLogs', l.id))
+                )
+              );
+              triggerActionNotice('Datos de prueba eliminados', 'info');
+            } catch (err) {
+              triggerActionNotice(`Error: ${err.code}`, 'error');
+            } finally { setGeneratingMock(false); }
+          }
+        });
+      };
+
+      // ── MIS ESTADÍSTICAS ──────────────────────────────────────────────────
+      const myStatsCalculated = useMemo(() => {
+        if (!currentAgent) return { totalSum: 0, points: 0, history: [], totals: emptyForm(), totalDays: 0 };
+        const logs = allLogs.filter(l => l.userId === currentAgent.id);
+        const totals = emptyForm();
+        let points = 0;
+        logs.forEach(l => {
+          Object.keys(totals).forEach(k => { totals[k] += l[k] || 0; });
+          points += calcScore(l);
+        });
+        return {
+          totals, points,
+          sumTotalAcciones: Object.values(totals).reduce((a, b) => a + b, 0),
+          totalDays: logs.length,
+          history: [...logs].sort((a, b) => b.fecha.localeCompare(a.fecha))
+        };
+      }, [allLogs, currentAgent]);
+
+      // ── RANKING ───────────────────────────────────────────────────────────
+      const agentsPerformanceBase = useMemo(() => {
+        const map = {};
+        activeAgentsList.forEach(u => {
+          map[u.id] = {
+            id: u.id, nombre: u.nombre, email: u.email, esAdmin: u.isAdmin,
+            puntos: 0, totalActividades: 0,
+            nuevosBD: 0, conversaciones: 0, seguimiento: 0,
+            openHouse: 0, redesSociales: 0, citas: 0, referencias: 0,
+            captaciones: 0, cierres: 0
+          };
+        });
+        allLogs.forEach(log => {
+          if (!map[log.userId]) {
+            map[log.userId] = {
+              id: log.userId, nombre: log.userName || 'Asesor', email: log.userEmail || '',
+              esAdmin: false, puntos: 0, totalActividades: 0,
+              nuevosBD: 0, conversaciones: 0, seguimiento: 0,
+              openHouse: 0, redesSociales: 0, citas: 0, referencias: 0,
+              captaciones: 0, cierres: 0
+            };
+          }
+          const e = map[log.userId];
+          ['nuevosBD','conversaciones','seguimiento','openHouse','redesSociales','citas','referencias','captaciones','cierres'].forEach(k => {
+            e[k] += log[k] || 0;
+            e.totalActividades += log[k] || 0;
+          });
+          e.puntos += calcScore(log);
+        });
+        return Object.values(map).filter(a => !a.esAdmin);
+      }, [allLogs, activeAgentsList]);
+
+      const globalRanking = useMemo(
+        () => [...agentsPerformanceBase].sort((a, b) => b[activeRankingMetric] - a[activeRankingMetric]),
+        [agentsPerformanceBase, activeRankingMetric]
+      );
+
+      const filteredAdminLogs = useMemo(() => {
+        let r = [...allLogs];
+        if (adminSelectedUser !== 'all') r = r.filter(l => l.userId === adminSelectedUser);
+        if (adminSearchTerm.trim()) {
+          const t = adminSearchTerm.toLowerCase();
+          r = r.filter(l => (l.userName||'').toLowerCase().includes(t) || l.fecha.includes(t));
+        }
+        return r.sort((a, b) => b.fecha.localeCompare(a.fecha));
+      }, [allLogs, adminSelectedUser, adminSearchTerm]);
+
+      const adminGlobalMetrics = useMemo(() => ({
+        activeAgentsCount: new Set(allLogs.map(l => l.userId)).size,
+        totalNuevosBD: allLogs.reduce((s, l) => s + (l.nuevosBD||0), 0),
+        totalConversaciones: allLogs.reduce((s, l) => s + (l.conversaciones||0), 0),
+        totalCitas: allLogs.reduce((s, l) => s + (l.citas||0), 0),
+      }), [allLogs]);
+
+      const triggerActionNotice = (message, type = 'success') => {
+        setActionNotice({ show: true, message, type });
+        setTimeout(() => setActionNotice(p => ({ ...p, show: false })), 5000);
+      };
+
+      const handleIndicatorChange = (id, value) => {
+        setDailyForm(p => ({ ...p, [id]: Math.max(0, parseInt(value) || 0) }));
+      };
+
+      // ── PANTALLA DE CARGA ─────────────────────────────────────────────────
+      if (loading) {
+        return (
+          <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+            <div className="text-center text-white space-y-4">
+              <RefreshCw className="w-8 h-8 animate-spin mx-auto text-rose-500" />
+              <p className="text-sm font-semibold text-slate-400">Conectando con Firebase...</p>
+            </div>
+          </div>
+        );
+      }
+
+      // ── LOGIN ─────────────────────────────────────────────────────────────
+      if (!currentAgent) {
+        return (
+          <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center p-4">
+            <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200">
+              <div className="bg-gradient-to-r from-red-800 via-rose-600 to-red-900 p-6 text-center text-white relative">
+                <div className="absolute top-3 right-3 bg-white/20 px-3 py-1 rounded-full text-[10px] font-semibold backdrop-blur-sm uppercase">Santa Ana</div>
+                <h1 className="text-2xl font-black tracking-wider">KELLER WILLIAMS</h1>
+                <p className="text-rose-100 text-xs mt-1 font-light uppercase tracking-widest">Breakthrough 120 (BT120)</p>
+              </div>
+
+              <div className="p-8">
+                <h2 className="text-lg font-bold text-slate-800 mb-6 text-center">Acceso Rápido para Asesores</h2>
+
+                {!fbReady && (
+                  <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-xs flex items-center gap-2">
+                    <RefreshCw className="w-4 h-4 animate-spin flex-shrink-0" />
+                    <span>Conectando con la base de datos...</span>
+                  </div>
+                )}
+
+                {authError && (
+                  <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-xl text-red-700 text-xs flex items-start gap-2">
+                    <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                    <span>{authError}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleAgentLogin} className="space-y-6">
+                  <div className="relative" ref={dropdownRef}>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Selecciona tu Perfil</label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder={selectedAgentTemp ? selectedAgentTemp.nombre : "Escribe tu nombre..."}
+                        value={agentSearchInput}
+                        onChange={(e) => { setAgentSearchInput(e.target.value); setIsDropdownOpen(true); if (selectedAgentTemp) setSelectedAgentTemp(null); }}
+                        onFocus={() => setIsDropdownOpen(true)}
+                        className="w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 text-slate-800 text-sm font-semibold"
+                      />
+                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+                    </div>
+                    {isDropdownOpen && (
+                      <div className="absolute left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl z-50 divide-y divide-slate-100">
+                        {filteredSearchAgents.length === 0 ? (
+                          <div className="p-4 text-center text-xs text-slate-400">Ningún asesor coincide.</div>
+                        ) : (
+                          filteredSearchAgents.map(agent => (
+                            <button key={agent.id} type="button"
+                              onClick={() => { setSelectedAgentTemp(agent); setAgentSearchInput(agent.nombre); setIsDropdownOpen(false); setAuthError(''); }}
+                              className="w-full text-left px-4 py-3 hover:bg-rose-50 flex items-center justify-between transition-colors"
+                            >
+                              <div>
+                                <p className="text-sm font-bold text-slate-800">{agent.nombre}</p>
+                                <p className="text-xs text-slate-400">{agent.email}</p>
+                              </div>
+                              {agent.isAdmin && <span className="bg-rose-100 text-rose-600 text-[9px] font-bold px-2 py-0.5 rounded-full">Admin</span>}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {selectedAgentTemp && (
+                    <div className="bg-emerald-50 border border-emerald-150 p-3.5 rounded-xl flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Check className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                        <div>
+                          <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-wider">Seleccionado</p>
+                          <p className="text-xs text-emerald-800 font-extrabold">{selectedAgentTemp.nombre}</p>
+                        </div>
+                      </div>
+                      <button type="button" onClick={() => { setSelectedAgentTemp(null); setAgentSearchInput(''); }} className="text-slate-400 hover:text-rose-600">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">PIN de Acceso (4 dígitos)</label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                      <input
+                        type={showPin ? 'text' : 'password'}
+                        required maxLength={6}
+                        placeholder="Escribe tu PIN"
+                        value={pinInput}
+                        onChange={(e) => setPinInput(e.target.value)}
+                        className="w-full pl-10 pr-20 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 text-slate-800 text-sm font-semibold tracking-widest"
+                      />
+                      <button type="button" onClick={() => setShowPin(!showPin)} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600 font-bold">
+                        {showPin ? 'Ocultar' : 'Mostrar'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <button type="submit" className="w-full py-4 bg-rose-600 hover:bg-rose-700 text-white font-extrabold rounded-xl shadow-md tracking-wider transition-all active:scale-[0.98]">
+                    INGRESAR AL PANEL
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // ── DASHBOARD ─────────────────────────────────────────────────────────
+      return (
+        <div className="min-h-screen bg-slate-50 flex flex-col text-slate-800">
+
+          {actionNotice.show && (
+            <div className="fixed top-3 right-3 left-3 sm:left-auto sm:top-5 sm:right-5 z-50 sm:max-w-sm">
+              <div className={`p-4 rounded-xl shadow-2xl flex items-start gap-3 border ${
+                actionNotice.type === 'success' ? 'bg-emerald-600 border-emerald-500 text-white' :
+                actionNotice.type === 'error'   ? 'bg-rose-600 border-rose-500 text-white' :
+                'bg-sky-600 border-sky-500 text-white'
+              }`}>
+                <CheckCircle2 className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <span className="font-bold text-xs leading-relaxed">{actionNotice.message}</span>
+              </div>
+            </div>
+          )}
+
+          {confirmModal.show && (
+            <div className="fixed inset-0 bg-slate-950/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+              <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-200">
+                <h3 className="text-lg font-bold text-slate-950 flex items-center gap-2 mb-2">
+                  <AlertTriangle className="w-5 h-5 text-rose-600" />
+                  {confirmModal.title}
+                </h3>
+                <p className="text-slate-600 text-xs leading-relaxed mb-6">{confirmModal.message}</p>
+                <div className="flex gap-3 justify-end">
+                  <button onClick={() => setConfirmModal(p => ({ ...p, show: false }))} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg">Cancelar</button>
+                  <button onClick={confirmModal.onConfirm} className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg shadow-md">Confirmar</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* HEADER */}
+          <header className="bg-slate-950 text-white shadow-md sticky top-0 z-40">
+            <div className="max-w-7xl mx-auto px-3 py-2.5 sm:px-6 lg:px-8 flex flex-row justify-between items-center gap-2">
+              <div className="flex items-center gap-3">
+                <div className="bg-rose-600 p-2 rounded-xl shadow flex-shrink-0"><Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-white" /></div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-sm sm:text-md font-black tracking-wider uppercase text-rose-500 whitespace-nowrap">KW Santa Ana</h1>
+                    <span className="bg-rose-500/20 text-rose-300 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase">BT120</span>
+                  </div>
+                  <p className="text-slate-400 text-[10px] font-medium uppercase tracking-widest hidden sm:block">Plataforma Oficial de Seguimiento</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="text-right hidden sm:block">
+                  <p className="text-xs font-bold text-rose-100 truncate max-w-[140px]">{currentAgent.nombre}</p>
+                  <p className="text-[10px] text-slate-400 italic">{currentAgent.isAdmin ? 'Director de Tecnología (Admin)' : 'Asesor Asociado'}</p>
+                </div>
+                <button onClick={handleLogout} className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 px-2.5 sm:px-3.5 py-2 rounded-lg text-[10px] font-black text-rose-400 hover:text-rose-300 border border-slate-800 transition-all active:scale-95">
+                  <LogOut className="w-3.5 h-3.5" /><span className="hidden sm:inline">SALIR</span>
+                </button>
+              </div>
+            </div>
+          </header>
+
+          {/* NAV */}
+          <nav className="bg-white border-b border-slate-200 shadow-sm">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex justify-start space-x-1 sm:space-x-4 py-2 overflow-x-auto scrollbar-none">
+                {[
+                  { key: 'daily',   icon: PlusCircle,  label: 'Carga Diaria' },
+                  { key: 'powerHour', icon: Zap, label: 'Hora del Poder' },
+                  { key: 'myStats', icon: BarChart3,    label: 'Mi Historial' },
+                  { key: 'ranking', icon: Trophy,       label: 'Ranking' },
+                ].map(({ key, icon: Icon, label }) => (
+                  <button key={key} onClick={() => setActiveTab(key)}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                      activeTab === key ? 'bg-rose-50 text-rose-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" /><span className="hidden xs:inline sm:inline">{label}</span>
+                  </button>
+                ))}
+                {currentAgent.isAdmin && (
+                  <button onClick={() => setActiveTab('admin')}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold border transition-all whitespace-nowrap ${
+                      activeTab === 'admin' ? 'bg-rose-600 text-white border-rose-600 shadow' : 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100'
+                    }`}
+                  >
+                    <Award className="w-4 h-4" /><span className="hidden xs:inline sm:inline">Panel Admin</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </nav>
+
+          {/* CONTENIDO */}
+          <main className="flex-grow max-w-7xl w-full mx-auto px-3 py-5 sm:px-6 sm:py-8 lg:px-8">
+
+            {/* ── CARGA DIARIA ── */}
+            {activeTab === 'daily' && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 bg-white rounded-2xl p-6 sm:p-8 shadow-md border border-slate-200/85">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 pb-6 border-b border-slate-100">
+                    <div>
+                      <h2 className="text-xl font-bold text-slate-850">Cargar Actividad Diaria</h2>
+                      <p className="text-slate-400 text-xs mt-0.5">Escoge el día y registra las cantidades obtenidas</p>
+                    </div>
+                    <div className="w-full sm:w-auto">
+                      <label className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">Fecha de Trabajo</label>
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)}
+                          max={new Date().toISOString().split('T')[0]}
+                          className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <form onSubmit={handleSaveDailyLog} className="space-y-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {INDICATORS.map((ind) => {
+                        const Icon = ind.icon;
+                        return (
+                          <div key={ind.id} className={`p-4 rounded-xl border flex items-center justify-between hover:shadow-sm ${ind.color}`}>
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 rounded-lg bg-white shadow-sm"><Icon className="w-5 h-5 text-slate-700" /></div>
+                              <div>
+                                <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider leading-tight">{ind.label}</span>
+                                <span className="text-[10px] font-extrabold text-slate-400">+{ind.weight} Pts</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button type="button" onClick={() => handleIndicatorChange(ind.id, dailyForm[ind.id] - 1)}
+                                className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-600 hover:bg-slate-100 active:scale-90">-</button>
+                              <input type="number" min="0" value={dailyForm[ind.id] || 0}
+                                onChange={(e) => handleIndicatorChange(ind.id, e.target.value)}
+                                className="w-12 text-center bg-white border border-slate-300 rounded-lg py-1 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-rose-500"
+                              />
+                              <button type="button" onClick={() => handleIndicatorChange(ind.id, dailyForm[ind.id] + 1)}
+                                className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-600 hover:bg-slate-100 active:scale-90">+</button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="pt-4">
+                      <button type="submit" disabled={savingLog}
+                        className="w-full px-8 py-4 bg-slate-950 hover:bg-slate-900 text-white font-bold rounded-xl shadow-lg transition-all tracking-wider flex items-center justify-center gap-3 active:scale-95 disabled:opacity-60">
+                        {savingLog ? <><RefreshCw className="w-4 h-4 animate-spin" /><span className="text-xs">GUARDANDO...</span></> : <><Check className="w-4 h-4 text-emerald-400" /><span className="text-xs">REGISTRAR MI ACTIVIDAD</span></>}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="bg-gradient-to-br from-rose-700 to-red-900 rounded-2xl p-6 text-white shadow-xl">
+                    <Crown className="w-10 h-10 text-amber-300 mb-4" />
+                    <h3 className="text-md font-extrabold mb-2">Desafío Breakthrough 120</h3>
+                    <p className="text-rose-100 text-xs leading-relaxed font-light">
+                      "La disciplina en la prospección es el cimiento de un negocio millonario". BT120 mide el hábito constante de generar conversaciones y expandir la base de datos durante 120 días.
+                    </p>
+                    <div className="mt-6 pt-6 border-t border-white/10 flex justify-between items-center text-xs">
+                      <div><span className="block text-rose-300 uppercase tracking-widest font-bold text-[10px]">Meta Diaria</span><span className="text-lg font-black">10 Contactos</span></div>
+                      <div className="text-right"><span className="block text-rose-300 uppercase tracking-widest font-bold text-[10px]">Market Center</span><span className="text-lg font-black">Santa Ana</span></div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+                    <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2 text-xs">
+                      <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+                      <span>Estrategias de Prospección</span>
+                    </h4>
+                    <ul className="space-y-3 text-xs text-slate-600 leading-relaxed">
+                      {['Llama primero a tu esfera de confianza.', 'Registra cada contacto en Command Mobile.', 'El seguimiento cierra el 80% de los negocios.'].map((tip, i) => (
+                        <li key={i} className="flex items-start gap-2">
+                          <span className="w-1.5 h-1.5 bg-rose-500 rounded-full flex-shrink-0 mt-1.5" /><span>{tip}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── HORA DEL PODER ── */}
+            {activeTab === 'powerHour' && (
+              <div className="space-y-8 max-w-5xl mx-auto">
+                <div className="bg-gradient-to-br from-indigo-900 to-slate-900 rounded-3xl p-8 shadow-2xl border border-indigo-500/30 text-white relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+                    <Zap className="w-48 h-48" />
+                  </div>
+                  
+                  <div className="relative z-10 text-center mb-10">
+                    <div className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-500/20 text-indigo-300 rounded-full text-xs font-black uppercase tracking-widest mb-4 border border-indigo-500/30">
+                      <Zap className="w-4 h-4" /> Entrenamiento en Vivo
+                    </div>
+                    <h2 className="text-3xl sm:text-5xl font-black tracking-tight mb-3 text-transparent bg-clip-text bg-gradient-to-r from-indigo-200 via-white to-indigo-200">Hora del Poder</h2>
+                    <p className="text-indigo-200/80 font-medium max-w-xl mx-auto">Presiona los botones para registrar tu actividad en tiempo real. ¡Compite por el primer lugar hoy!</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 relative z-10">
+                    <button onClick={() => handlePowerHourAction('llamadas')} className="group relative bg-white/5 hover:bg-white/10 border border-white/10 hover:border-indigo-400/50 rounded-2xl p-6 transition-all active:scale-95 flex flex-col items-center gap-4 overflow-hidden">
+                      <div className="w-16 h-16 rounded-full bg-indigo-500/20 flex items-center justify-center group-hover:bg-indigo-500/40 transition-colors">
+                        <PhoneCall className="w-8 h-8 text-indigo-300" />
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-black mb-1">Llamada</div>
+                        <div className="text-indigo-300 text-[10px] font-bold uppercase tracking-wider">1 Punto</div>
+                      </div>
+                    </button>
+
+                    <button onClick={() => handlePowerHourAction('conversaciones')} className="group relative bg-white/5 hover:bg-white/10 border border-white/10 hover:border-emerald-400/50 rounded-2xl p-6 transition-all active:scale-95 flex flex-col items-center gap-4 overflow-hidden">
+                      <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center group-hover:bg-emerald-500/40 transition-colors">
+                        <MessageCircle className="w-8 h-8 text-emerald-300" />
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-black mb-1">Conversación</div>
+                        <div className="text-emerald-300 text-[10px] font-bold uppercase tracking-wider">2 Puntos</div>
+                      </div>
+                    </button>
+
+                    <button onClick={() => handlePowerHourAction('nuevosBD')} className="group relative bg-white/5 hover:bg-white/10 border border-white/10 hover:border-rose-400/50 rounded-2xl p-6 transition-all active:scale-95 flex flex-col items-center gap-4 overflow-hidden">
+                      <div className="w-16 h-16 rounded-full bg-rose-500/20 flex items-center justify-center group-hover:bg-rose-500/40 transition-colors">
+                        <Database className="w-8 h-8 text-rose-300" />
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-black mb-1">Nuevo en BD</div>
+                        <div className="text-rose-300 text-[10px] font-bold uppercase tracking-wider">3 Puntos</div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
+                  <div className="p-6 sm:p-8 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-indigo-100 p-3 rounded-xl"><Trophy className="w-6 h-6 text-indigo-600" /></div>
+                      <div>
+                        <h3 className="text-xl font-black text-slate-900">Leaderboard del Día</h3>
+                        <p className="text-xs font-semibold text-slate-500 mt-0.5">{new Date().toISOString().split('T')[0]}</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="p-0">
+                    {(() => {
+                      const todayDate = new Date().toISOString().split('T')[0];
+                      const todaysLogs = powerHourLogs.filter(l => l.fecha === todayDate);
+                      
+                      const ranked = todaysLogs.map(l => ({
+                        ...l,
+                        puntos: (l.llamadas || 0) * 1 + (l.conversaciones || 0) * 2 + (l.nuevosBD || 0) * 3
+                      })).sort((a, b) => b.puntos - a.puntos);
+
+                      if (ranked.length === 0) {
+                        return (
+                          <div className="p-12 text-center text-slate-400">
+                            <Zap className="w-16 h-16 mx-auto mb-4 opacity-20" />
+                            <p className="text-sm font-bold">Nadie ha registrado actividad hoy aún.</p>
+                            <p className="text-xs mt-1">¡Sé el primero en apretar los botones de arriba!</p>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50/80 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                                <th className="py-4 px-6 text-center w-20">Rank</th>
+                                <th className="py-4 px-6">Agente</th>
+                                <th className="py-4 px-6 text-center"><PhoneCall className="w-4 h-4 inline-block mr-1"/> Llamadas</th>
+                                <th className="py-4 px-6 text-center"><MessageCircle className="w-4 h-4 inline-block mr-1"/> Conversaciones</th>
+                                <th className="py-4 px-6 text-center"><Database className="w-4 h-4 inline-block mr-1"/> Nuevos BD</th>
+                                <th className="py-4 px-6 text-right">Puntos Totales</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 text-sm font-semibold text-slate-700">
+                              {ranked.map((agent, i) => (
+                                <tr key={agent.id} className="hover:bg-slate-50/50 transition-colors">
+                                  <td className="py-4 px-6 text-center">
+                                    {i === 0 ? <span className="inline-flex w-8 h-8 bg-amber-400 text-white rounded-full items-center justify-center font-black text-sm shadow-md">1</span>
+                                     : i === 1 ? <span className="inline-flex w-8 h-8 bg-slate-300 text-slate-800 rounded-full items-center justify-center font-black text-sm shadow-md">2</span>
+                                     : i === 2 ? <span className="inline-flex w-8 h-8 bg-amber-700 text-white rounded-full items-center justify-center font-black text-sm shadow-md">3</span>
+                                     : <span className="font-bold text-slate-400">{i+1}</span>}
+                                  </td>
+                                  <td className="py-4 px-6 font-black text-slate-900">{agent.userName}</td>
+                                  <td className="py-4 px-6 text-center font-bold text-indigo-600">{agent.llamadas || 0}</td>
+                                  <td className="py-4 px-6 text-center font-bold text-emerald-600">{agent.conversaciones || 0}</td>
+                                  <td className="py-4 px-6 text-center font-bold text-rose-600">{agent.nuevosBD || 0}</td>
+                                  <td className="py-4 px-6 text-right font-black text-2xl text-indigo-900">{agent.puntos}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── MI HISTORIAL ── */}
+            {activeTab === 'myStats' && (
+              <div className="space-y-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {[
+                    { label: 'Días Registrados', value: `${myStatsCalculated.totalDays} / 120`, icon: CalendarDays, color: 'text-rose-500' },
+                    { label: 'Puntos Acumulados', value: `${myStatsCalculated.points} Pts`, icon: Trophy, color: 'text-amber-500', valueClass: 'text-rose-600' },
+                    { label: 'Acciones Totales', value: myStatsCalculated.sumTotalAcciones, icon: CheckCircle2, color: 'text-emerald-500' },
+                    { label: 'Conversaciones', value: myStatsCalculated.totals?.conversaciones || 0, icon: MessageCircle, color: 'text-sky-500' },
+                  ].map(({ label, value, icon: Icon, color, valueClass }) => (
+                    <div key={label} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                      <div>
+                        <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</span>
+                        <span className={`text-xl font-black ${valueClass || 'text-slate-850'}`}>{value}</span>
+                      </div>
+                      <Icon className={`w-7 h-7 ${color}`} />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+                  <h3 className="text-sm font-bold mb-6 text-slate-850">Distribución de Actividades</h3>
+                  <div className="space-y-4">
+                    {INDICATORS.map(ind => {
+                      const val = myStatsCalculated.totals?.[ind.id] || 0;
+                      const pct = myStatsCalculated.sumTotalAcciones > 0 ? Math.min(100, Math.round((val / myStatsCalculated.sumTotalAcciones) * 100)) : 0;
+                      return (
+                        <div key={ind.id} className="space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-slate-600 font-semibold">{ind.label}</span>
+                            <span className="text-slate-900 font-extrabold">{val} ({pct}%)</span>
+                          </div>
+                          <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-rose-600 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                    <h3 className="font-bold text-slate-850 text-sm">Historial de Registros</h3>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">Orden cronológico</span>
+                  </div>
+                  {myStatsCalculated.history.length === 0 ? (
+                    <div className="p-12 text-center text-slate-400">
+                      <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                      <p className="text-sm font-medium">Aún no has registrado actividades.</p>
+                      <button onClick={() => setActiveTab('daily')} className="mt-4 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg">
+                        Registrar Mi Primer Día
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                            {['Fecha','Nuevos BD','Conversaciones','Seguimientos','Open House','Redes','Citas','Referencias','Captaciones','Cierres','Puntos'].map(h => (
+                              <th key={h} className="py-3 px-2 sm:px-4 whitespace-nowrap">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
+                          {myStatsCalculated.history.map(log => (
+                            <tr key={log.id} className="hover:bg-slate-50/50">
+                              <td className="py-3 px-2 sm:px-4 font-bold text-slate-900 whitespace-nowrap"><span className="hidden sm:inline-flex items-center gap-1"><Calendar className="w-3 h-3 text-slate-400 mr-1" /></span>{log.fecha}</td>
+                              <td className="py-4 px-4 text-center">{log.nuevosBD||0}</td>
+                              <td className="py-3 px-2 sm:px-4 text-center text-emerald-600">{log.conversaciones||0}</td>
+                              <td className="py-3 px-2 sm:px-4 text-center">{log.seguimiento||0}</td>
+                              <td className="py-3 px-2 sm:px-4 text-center">{log.openHouse||0}</td>
+                              <td className="py-3 px-2 sm:px-4 text-center">{log.redesSociales||0}</td>
+                              <td className="py-3 px-2 sm:px-4 text-center text-purple-600">{log.citas||0}</td>
+                              <td className="py-3 px-2 sm:px-4 text-center">{log.referencias||0}</td>
+                              <td className="py-3 px-2 sm:px-4 text-center font-bold text-orange-600">{log.captaciones||0}</td>
+                              <td className="py-3 px-2 sm:px-4 text-center font-bold text-green-600">{log.cierres||0}</td>
+                              <td className="py-3 px-2 sm:px-4 text-right font-extrabold text-rose-600 whitespace-nowrap">{calcScore(log)} Pts</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── RANKING ── */}
+            {activeTab === 'ranking' && (
+              <div className="space-y-6">
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                  <div className="flex items-center gap-2"><Filter className="w-4 h-4 text-rose-600" /><h3 className="text-xs font-bold uppercase tracking-wider text-slate-600">Clasificaciones</h3></div>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(RANKING_METRICS_DEF).map(([key, def]) => (
+                      <button key={key} onClick={() => setActiveRankingMetric(key)}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap border ${
+                          activeRankingMetric === key ? 'bg-rose-600 text-white border-rose-600 shadow-md' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >{def.label}</button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="text-center py-2">
+                  <p className="text-xs font-extrabold uppercase tracking-widest text-rose-600">Tablero de Clasificación</p>
+                  <h2 className="text-2xl font-black text-slate-900 mt-1 uppercase">{RANKING_METRICS_DEF[activeRankingMetric].label}</h2>
+                </div>
+
+                {activeRankingMetric === 'puntos' && (
+                  <div className="bg-slate-950 rounded-2xl p-5 sm:p-6 border border-slate-800 shadow-inner">
+                    <p className="text-xs font-black uppercase tracking-widest text-rose-400 mb-4 flex items-center gap-2">
+                      <Trophy className="w-4 h-4" /> Tabla de Puntuación BT120
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {[
+                        { label: 'Contacto / Nuevos BD', pts: 2 },
+                        { label: 'Conversación Inmobiliaria', pts: 2 },
+                        { label: 'Seguimiento', pts: 2 },
+                        { label: 'Prospecto Open House', pts: 2 },
+                        { label: 'Prospecto Redes Sociales', pts: 2 },
+                        { label: 'Cita Programada', pts: 25 },
+                        { label: 'Referencia Recibida', pts: 50 },
+                        { label: 'Captación', pts: 75 },
+                        { label: 'Cierre', pts: 100 },
+                      ].map(({ label, pts }) => (
+                        <div key={label} className="flex items-center justify-between bg-slate-900 rounded-xl px-3 py-2.5 border border-slate-800">
+                          <span className="text-[10px] font-semibold text-slate-300 leading-tight pr-2">{label}</span>
+                          <span className="text-sm font-black text-rose-400 whitespace-nowrap flex-shrink-0">+{pts}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 max-w-4xl mx-auto items-end pt-10 pb-4">
+                  {globalRanking[1] && globalRanking[1][activeRankingMetric] > 0 && (
+                    <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-sm flex flex-col items-center relative order-2 md:order-1">
+                      <div className="absolute -top-6 w-12 h-12 bg-slate-300 rounded-full border-4 border-white flex items-center justify-center text-white font-black text-sm shadow-md">2</div>
+                      <Medal className="w-9 h-9 text-slate-400 mb-3 mt-2" />
+                      <h4 className="font-bold text-slate-800 text-center truncate w-full text-xs">{globalRanking[1].nombre}</h4>
+                      <div className="mt-4 px-4 py-1.5 bg-slate-100 rounded-full text-[10px] font-black text-slate-700">{globalRanking[1][activeRankingMetric]} {RANKING_METRICS_DEF[activeRankingMetric].unit}</div>
+                    </div>
+                  )}
+                  {globalRanking[0] && globalRanking[0][activeRankingMetric] > 0 && (
+                    <div className="bg-gradient-to-b from-amber-50 to-white rounded-2xl border-2 border-amber-300 p-6 sm:p-8 shadow-md flex flex-col items-center relative order-1 md:order-2 sm:scale-105">
+                      <div className="absolute -top-8 w-14 h-14 bg-amber-400 rounded-full border-4 border-white flex items-center justify-center text-white font-black text-lg shadow-lg">1</div>
+                      <Crown className="w-12 h-12 text-amber-500 mb-3 fill-amber-300 mt-2" />
+                      <h4 className="font-black text-slate-900 text-center truncate w-full text-sm">{globalRanking[0].nombre}</h4>
+                      <div className="mt-4 px-5 py-2 bg-amber-500 text-white rounded-full text-xs font-black tracking-wide shadow-sm uppercase">{globalRanking[0][activeRankingMetric]} {RANKING_METRICS_DEF[activeRankingMetric].unit}</div>
+                    </div>
+                  )}
+                  {globalRanking[2] && globalRanking[2][activeRankingMetric] > 0 && (
+                    <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-sm flex flex-col items-center relative order-3">
+                      <div className="absolute -top-6 w-12 h-12 bg-amber-700 rounded-full border-4 border-white flex items-center justify-center text-white font-black text-sm shadow-md">3</div>
+                      <Award className="w-9 h-9 text-amber-700 mb-3 mt-2" />
+                      <h4 className="font-bold text-slate-800 text-center truncate w-full text-xs">{globalRanking[2].nombre}</h4>
+                      <div className="mt-4 px-4 py-1.5 bg-amber-50 rounded-full text-[10px] font-black text-amber-800">{globalRanking[2][activeRankingMetric]} {RANKING_METRICS_DEF[activeRankingMetric].unit}</div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                    <div>
+                      <h3 className="font-bold text-slate-850 text-sm">Tabla de Clasificaciones</h3>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Mayor a menor según métrica activa</p>
+                    </div>
+                    <div className="bg-rose-50 text-rose-700 text-[10px] font-extrabold px-3 py-1.5 rounded-lg border border-rose-100 flex items-center gap-2">
+                      <Trophy className="w-3.5 h-3.5" />{activeAgentsList.filter(a => !a.isAdmin).length} Asesores
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                          <th className="py-3 px-3 sm:px-6 text-center w-14 sm:w-20">Puesto</th>
+                          <th className="py-3 px-3 sm:px-6">Asesor</th>
+                          <th className="py-3 px-3 sm:px-6 text-center bg-rose-50/30">Métrica</th>
+                          <th className="py-3 px-3 sm:px-6 text-center hidden sm:table-cell">Actividades</th>
+                          <th className="py-3 px-3 sm:px-6 text-right">Puntos</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
+                        {globalRanking.filter(agent => agent[activeRankingMetric] > 0).map((agent, i) => (
+                          <tr key={agent.id} className="hover:bg-slate-50/50">
+                            <td className="py-3 px-3 sm:px-6 text-center">
+                              {i === 0 ? <span className="inline-flex w-6 h-6 bg-amber-400 text-white rounded-full items-center justify-center font-black text-[10px]">1º</span>
+                               : i === 1 ? <span className="inline-flex w-6 h-6 bg-slate-300 text-slate-800 rounded-full items-center justify-center font-black text-[10px]">2º</span>
+                               : i === 2 ? <span className="inline-flex w-6 h-6 bg-amber-700 text-white rounded-full items-center justify-center font-black text-[10px]">3º</span>
+                               : <span className="font-bold text-slate-400">{i+1}º</span>}
+                            </td>
+                            <td className="py-3 px-3 sm:px-6 font-bold text-slate-900 whitespace-nowrap">{agent.nombre}</td>
+                            <td className="py-3 px-3 sm:px-6 text-center bg-rose-50/30 text-rose-700 font-extrabold whitespace-nowrap">{agent[activeRankingMetric] > 0 ? `${agent[activeRankingMetric]} ${RANKING_METRICS_DEF[activeRankingMetric].unit}` : <span className="text-slate-300">—</span>}</td>
+                            <td className="py-3 px-3 sm:px-6 text-center text-slate-600 hidden sm:table-cell">{agent.totalActividades > 0 ? agent.totalActividades : <span className="text-slate-300">—</span>}</td>
+                            <td className="py-3 px-3 sm:px-6 text-right font-black text-rose-600 whitespace-nowrap">{agent.puntos > 0 ? `${agent.puntos} Pts` : <span className="text-slate-300">—</span>}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── PANEL ADMIN ── */}
+            {activeTab === 'admin' && currentAgent.isAdmin && (
+              <div className="space-y-8">
+
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-md p-6 sm:p-8 space-y-6">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-6 border-b border-slate-100">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-rose-50 p-2.5 rounded-xl border border-rose-100"><FileSpreadsheet className="w-6 h-6 text-rose-600" /></div>
+                      <div>
+                        <h3 className="text-lg font-bold text-slate-900">Gestión de Nómina y Respaldos</h3>
+                        <p className="text-slate-400 text-xs mt-0.5">Sube tu nómina o exporta la base actual</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                      <button onClick={downloadTemplateCSV} className="flex-1 sm:flex-none px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg">Plantilla Vacía</button>
+                      <button onClick={handleExportAgentsCSV} className="flex-1 sm:flex-none px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-lg border border-rose-200 flex items-center justify-center gap-1.5">
+                        <Download className="w-4 h-4" />Exportar Nómina
+                      </button>
+                      <button onClick={handleExportPerformanceCSV} className="flex-1 sm:flex-none px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs rounded-lg border border-emerald-200 flex items-center justify-center gap-1.5">
+                        <Trophy className="w-4 h-4" />Consolidado BT120
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-1 space-y-4">
+                      <div className="border-2 border-dashed border-slate-200 hover:border-rose-400 rounded-2xl p-6 text-center bg-slate-50/50 transition-colors relative">
+                        <input type="file" ref={fileInputRef} accept=".csv" onChange={handleCsvFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                        <UploadCloud className="w-10 h-10 text-slate-400 mx-auto mb-3" />
+                        <p className="text-xs font-bold text-slate-700">Arrastra tu nómina (.csv)</p>
+                        <p className="text-[10px] text-slate-400 mt-1">Columnas: NOMBRE_AGENTE, TELEFONO, PIN, EMAIL_KW, ROL</p>
+                      </div>
+
+                      {csvError && (
+                        <div className="p-4 bg-rose-50 border-l-4 border-rose-500 rounded-xl text-rose-700 text-xs flex items-start gap-2">
+                          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" /><span>{csvError}</span>
+                        </div>
+                      )}
+
+                      {csvPreviewData.length > 0 && (
+                        <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl space-y-3">
+                          <p className="text-xs text-emerald-800 font-bold">{csvPreviewData.length} asesores listos para importar</p>
+                          <button onClick={saveImportedAgents} disabled={isUploadingCsv || !firebaseUser}
+                            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-2 disabled:opacity-50">
+                            {isUploadingCsv ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />GUARDANDO...</> : <><CheckCircle2 className="w-3.5 h-3.5" />Confirmar y Aplicar</>}
+                          </button>
+                          {!firebaseUser && <p className="text-[10px] text-amber-600 font-bold text-center">Esperando conexión con Firebase...</p>}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="lg:col-span-2 border border-slate-200 rounded-2xl overflow-hidden bg-slate-50/30">
+                      <div className="p-4 bg-white border-b border-slate-200 font-bold text-xs text-slate-700 flex justify-between items-center">
+                        <span>Vista previa del CSV</span>
+                        {csvPreviewData.length > 0 && <span className="text-[10px] bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full font-bold">Listo para cargar</span>}
+                      </div>
+                      {csvPreviewData.length === 0 ? (
+                        <div className="p-12 text-center text-slate-400 text-xs">Ningún archivo cargado aún.</div>
+                      ) : (
+                        <div className="max-h-56 overflow-y-auto overflow-x-auto text-xs">
+                          <table className="w-full text-left border-collapse bg-white">
+                            <thead className="bg-slate-100 font-bold text-slate-500 uppercase text-[9px] border-b border-slate-200">
+                              <tr><th className="p-3">Nombre</th><th className="p-3">Email</th><th className="p-3 text-center">PIN</th><th className="p-3 text-center">Teléfono</th><th className="p-3 text-right">Rol</th></tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                              {csvPreviewData.map((a, i) => (
+                                <tr key={i} className="hover:bg-slate-50">
+                                  <td className="p-3 font-bold text-slate-900">{a.nombre}</td>
+                                  <td className="p-3 font-normal text-slate-500">{a.email}</td>
+                                  <td className="p-3 text-center font-mono font-bold text-rose-600">{a.pin}</td>
+                                  <td className="p-3 text-center text-slate-500">{a.telefono||'N/A'}</td>
+                                  <td className="p-3 text-right"><span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${a.isAdmin ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-600'}`}>{a.isAdmin ? 'ADMIN' : 'AGENT'}</span></td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 space-y-2">
+                    <div className="flex items-center gap-2 font-bold text-slate-800"><HelpCircle className="w-4 h-4 text-rose-600" />¿Cómo actualizar asesores?</div>
+                    <p className="leading-relaxed">
+                      1. Haz clic en <strong>Exportar Nómina</strong> para descargar la base actual.<br/>
+                      2. Ábrela en Google Sheets → Archivo → Importar → Subir.<br/>
+                      3. Edita nombres, teléfonos o PINs.<br/>
+                      4. Descarga como CSV y súbela en el recuadro de arriba.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-900 p-6 rounded-2xl text-white shadow-xl border border-indigo-500/20">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Award className="w-5 h-5 text-amber-300" />
+                        <span className="bg-amber-400/20 text-amber-300 text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">Módulo de Tecnología</span>
+                      </div>
+                      <h3 className="text-lg font-black">Pruebas del Sistema BT120</h3>
+                      <p className="text-indigo-200 text-xs font-light max-w-2xl leading-relaxed">Genera 10 días de datos simulados para verificar dashboards y reportes.</p>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                      <button onClick={handleInsertMockData} disabled={generatingMock}
+                        className="flex-1 sm:flex-initial px-5 py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs tracking-wider flex items-center justify-center gap-2 shadow-lg disabled:opacity-50">
+                        <RefreshCw className={`w-4 h-4 ${generatingMock ? 'animate-spin' : ''}`} />CARGAR SIMULACIÓN
+                      </button>
+                      <button onClick={confirmClearMockData} disabled={generatingMock}
+                        className="flex-1 sm:flex-initial px-5 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs tracking-wider flex items-center justify-center gap-2 disabled:opacity-50">
+                        BORRAR PRUEBAS
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {[
+                    { label: 'Asesores Activos', value: adminGlobalMetrics.activeAgentsCount, icon: User, color: 'text-indigo-500' },
+                    { label: 'Nuevos en Comando', value: adminGlobalMetrics.totalNuevosBD, icon: Database, color: 'text-rose-500', valueClass: 'text-rose-600' },
+                    { label: 'Conversaciones', value: adminGlobalMetrics.totalConversaciones, icon: MessageCircle, color: 'text-sky-500' },
+                    { label: 'Citas Agendadas', value: adminGlobalMetrics.totalCitas, icon: CalendarCheck, color: 'text-emerald-500' },
+                  ].map(({ label, value, icon: Icon, color, valueClass }) => (
+                    <div key={label} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                      <div>
+                        <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</span>
+                        <span className={`text-xl font-black ${valueClass || 'text-slate-800'}`}>{value}</span>
+                      </div>
+                      <Icon className={`w-7 h-7 ${color}`} />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="p-6 border-b border-slate-100 bg-slate-50/50 space-y-4">
+                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                      <div>
+                        <h3 className="text-md font-bold text-slate-850">Auditoría General de Datos</h3>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Sincronización en tiempo real</p>
+                      </div>
+                      <button onClick={handleExportDataCSV} className="w-full lg:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 active:scale-95">
+                        <Download className="w-4 h-4" />EXPORTAR CSV / EXCEL
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input type="text" placeholder="Buscar por asesor o fecha..." value={adminSearchTerm} onChange={(e) => setAdminSearchTerm(e.target.value)}
+                          className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-500" />
+                      </div>
+                      <div className="relative">
+                        <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <select value={adminSelectedUser} onChange={(e) => setAdminSelectedUser(e.target.value)}
+                          className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-500 appearance-none cursor-pointer">
+                          <option value="all">Todos los asesores</option>
+                          {activeAgentsList.map(u => <option key={u.id} value={u.id}>{u.nombre}{u.isAdmin ? ' (Admin)' : ''}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {filteredAdminLogs.length === 0 ? (
+                    <div className="p-16 text-center text-slate-400">
+                      <Database className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                      <p className="text-sm font-medium">No hay registros en este rango.</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                            {['Asesor','Fecha','Nuevos BD','Conversaciones','Seguimiento','Open House','Redes','Citas','Referencias','Captaciones','Cierres','Puntos'].map(h => (
+                              <th key={h} className="py-3 px-2 sm:px-4 whitespace-nowrap">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
+                          {filteredAdminLogs.map(log => (
+                            <tr key={log.id} className="hover:bg-slate-50/50">
+                              <td className="py-3 px-2 sm:px-4 font-bold text-slate-900">
+                                <div className="flex items-center gap-1.5">
+                                  {log.userName}
+                                  {log.esMock && <span className="bg-indigo-50 text-indigo-600 text-[8px] font-bold px-1.5 py-0.5 rounded border border-indigo-100 uppercase">Sim</span>}
+                                </div>
+                              </td>
+                              <td className="py-3 px-2 sm:px-4 text-slate-500 font-normal whitespace-nowrap">{log.fecha}</td>
+                              <td className="py-3 px-2 sm:px-4 text-center font-bold">{log.nuevosBD||0}</td>
+                              <td className="py-3 px-2 sm:px-4 text-center text-emerald-600">{log.conversaciones||0}</td>
+                              <td className="py-3 px-2 sm:px-4 text-center">{log.seguimiento||0}</td>
+                              <td className="py-3 px-2 sm:px-4 text-center">{log.openHouse||0}</td>
+                              <td className="py-3 px-2 sm:px-4 text-center">{log.redesSociales||0}</td>
+                              <td className="py-3 px-2 sm:px-4 text-center text-purple-600">{log.citas||0}</td>
+                              <td className="py-3 px-2 sm:px-4 text-center">{log.referencias||0}</td>
+                              <td className="py-3 px-2 sm:px-4 text-center font-bold text-orange-600">{log.captaciones||0}</td>
+                              <td className="py-3 px-2 sm:px-4 text-center font-bold text-green-600">{log.cierres||0}</td>
+                              <td className="py-3 px-2 sm:px-4 text-right font-black text-rose-600 whitespace-nowrap">{calcScore(log)} Pts</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            )}
+          </main>
+
+          <footer className="bg-slate-950 text-slate-400 text-center py-6 border-t border-slate-900 text-[10px] mt-12 font-medium">
+            <p>© 2026 Centro de negocios Inmobiliarios Santa Ana SAS. Todos los derechos reservados.</p>
+            <p className="mt-1">Diseñado bajo los lineamientos tecnológicos de KW Santa Ana.</p>
+          </footer>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
